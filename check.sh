@@ -82,7 +82,7 @@ fi
 ok "clippy found"
 
 if [[ "${SKIP_CODESPELL:-0}" != "1" ]]; then
-  need_cmd codespell
+  command -v codespell >/dev/null 2>&1 || fail "codespell is missing. Install it on Arch Linux with: sudo pacman -S codespell"
   ok "codespell found"
 else
   ok "codespell skipped by SKIP_CODESPELL=1"

@@ -99,6 +99,26 @@ cargo clippy
 cargo test
 ```
 
+## Development Checks
+
+Run the local quality gate before committing:
+
+```sh
+./check.sh
+```
+
+To skip the typo checker temporarily:
+
+```sh
+SKIP_CODESPELL=1 ./check.sh
+```
+
+Required tools:
+
+- `rustfmt`
+- `clippy`
+- `codespell`
+
 ## License
 
 MIT
