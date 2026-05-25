@@ -1,10 +1,28 @@
+use std::{
+    io::{self, IsTerminal, Write},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    thread,
+    time::{Duration, Instant},
+};
+
 use clap::Parser;
 
-use crate::{procfs, render, tree, user};
+use crate::{
+    procfs::{self, ScanReport},
+    render::{self, RenderOptions},
+    tree, user,
+    user::TargetUser,
+};
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const AUTHOR: &str = "rezky_nightky";
 pub const REPOSITORY: &str = "github.com/oxyzenQ/pidnest";
+pub const DEFAULT_INTERVAL_SECONDS: u64 = 6;
+pub const MIN_INTERVAL_SECONDS: u64 = 3;
+pub const MAX_INTERVAL_SECONDS: u64 = 60;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -20,6 +38,22 @@ pub struct Args {
     #[arg(long)]
     pub me: bool,
 
+    /// Continuously refresh the process tree
+    #[arg(long)]
+    pub live: bool,
+
+    /// Live refresh interval in seconds
+    #[arg(long)]
+    pub interval: Option<u64>,
+
+    /// Hide pid=<PID> labels
+    #[arg(long)]
+    pub no_pid: bool,
+
+    /// Disable ANSI color output
+    #[arg(long)]
+    pub no_color: bool,
+
     /// Print version information
     #[arg(short = 'V', long = "version")]
     pub version: bool,
@@ -31,25 +65,169 @@ pub fn run(args: Args) -> Result<(), String> {
         return Ok(());
     }
 
+    let interval_seconds = validate_interval(args.live, args.interval)?;
     let target = match (args.me, args.user_or_uid.as_deref()) {
         (true, None) => user::current_user()?,
         (false, Some(value)) => user::resolve_user_or_uid(value)?,
         (true, Some(_)) => return Err("use either --me or USER_OR_UID, not both".to_string()),
         (false, None) => return Err("expected USER_OR_UID or --me".to_string()),
     };
+    let options = RenderOptions {
+        show_pid: !args.no_pid,
+        color: should_use_color(args.no_color),
+    };
 
-    let processes = procfs::scan_processes_for_uid(target.uid)?;
-    let forest = tree::build_forest(processes);
-
-    if forest.processes.is_empty() {
-        println!("No readable processes found for {}.", target.label());
-        return Ok(());
+    if args.live {
+        run_live(target, interval_seconds, options)
+    } else {
+        print!("{}", render_snapshot(&target, options, None)?);
+        Ok(())
     }
-
-    print!("{}", render::render_forest(&target, &forest));
-    Ok(())
 }
 
 pub fn version_text() -> String {
     format!("pidnest v{VERSION}\n© 2026 {AUTHOR}\nMIT · {REPOSITORY}")
+}
+
+pub fn validate_interval(live: bool, interval: Option<u64>) -> Result<u64, String> {
+    match (live, interval) {
+        (false, Some(_)) => Err("--interval requires --live".to_string()),
+        (false, None) => Ok(DEFAULT_INTERVAL_SECONDS),
+        (true, Some(seconds))
+            if !(MIN_INTERVAL_SECONDS..=MAX_INTERVAL_SECONDS).contains(&seconds) =>
+        {
+            Err(format!(
+                "--interval must be between {MIN_INTERVAL_SECONDS} and {MAX_INTERVAL_SECONDS} seconds"
+            ))
+        }
+        (true, Some(seconds)) => Ok(seconds),
+        (true, None) => Ok(DEFAULT_INTERVAL_SECONDS),
+    }
+}
+
+fn should_use_color(no_color: bool) -> bool {
+    !no_color && std::env::var_os("NO_COLOR").is_none() && io::stdout().is_terminal()
+}
+
+fn run_live(
+    target: TargetUser,
+    interval_seconds: u64,
+    options: RenderOptions,
+) -> Result<(), String> {
+    let running = Arc::new(AtomicBool::new(true));
+    let handler_running = Arc::clone(&running);
+    ctrlc::set_handler(move || {
+        handler_running.store(false, Ordering::SeqCst);
+    })
+    .map_err(|error| format!("failed to install Ctrl+C handler: {error}"))?;
+
+    let interval = Duration::from_secs(interval_seconds);
+    while running.load(Ordering::SeqCst) {
+        print!("\x1b[2J\x1b[H");
+        print!(
+            "{}",
+            render_snapshot(&target, options, Some(interval_seconds))?
+        );
+        io::stdout()
+            .flush()
+            .map_err(|error| format!("failed to flush stdout: {error}"))?;
+
+        let started = Instant::now();
+        while running.load(Ordering::SeqCst) && started.elapsed() < interval {
+            let remaining = interval.saturating_sub(started.elapsed());
+            thread::sleep(remaining.min(Duration::from_millis(200)));
+        }
+    }
+
+    Ok(())
+}
+
+fn render_snapshot(
+    target: &TargetUser,
+    options: RenderOptions,
+    live_interval_seconds: Option<u64>,
+) -> Result<String, String> {
+    let report = procfs::scan_processes_for_uid(target.uid)?;
+    Ok(render_report(
+        target,
+        report,
+        options,
+        live_interval_seconds,
+    ))
+}
+
+fn render_report(
+    target: &TargetUser,
+    report: ScanReport,
+    options: RenderOptions,
+    live_interval_seconds: Option<u64>,
+) -> String {
+    let forest = tree::build_forest(report.processes);
+    if forest.processes.is_empty() {
+        let mut output = if target.uid == 0 {
+            "No readable processes found for uid=0. Try: sudo pidnest root\n".to_string()
+        } else {
+            format!("No readable processes found for {}.\n", target.label())
+        };
+        if let Some(interval_seconds) = live_interval_seconds {
+            output.push('\n');
+            output.push_str(&render::render_live_footer(interval_seconds, options));
+            output.push('\n');
+        }
+        return output;
+    }
+
+    let mut output = render::render_forest(target, &forest, options);
+    output.push('\n');
+
+    if report.unreadable_statuses > 0 {
+        output.push_str(&render::render_unreadable_note(options));
+        output.push('\n');
+    }
+
+    output.push_str(&render::render_summary(&forest, options));
+    output.push('\n');
+
+    if let Some(interval_seconds) = live_interval_seconds {
+        output.push_str(&render::render_live_footer(interval_seconds, options));
+        output.push('\n');
+    }
+
+    output
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn accepts_default_interval_for_live_mode() {
+        assert_eq!(validate_interval(true, None), Ok(DEFAULT_INTERVAL_SECONDS));
+    }
+
+    #[test]
+    fn accepts_interval_bounds_for_live_mode() {
+        assert_eq!(validate_interval(true, Some(MIN_INTERVAL_SECONDS)), Ok(3));
+        assert_eq!(validate_interval(true, Some(MAX_INTERVAL_SECONDS)), Ok(60));
+    }
+
+    #[test]
+    fn rejects_interval_outside_bounds() {
+        assert_eq!(
+            validate_interval(true, Some(2)),
+            Err("--interval must be between 3 and 60 seconds".to_string())
+        );
+        assert_eq!(
+            validate_interval(true, Some(61)),
+            Err("--interval must be between 3 and 60 seconds".to_string())
+        );
+    }
+
+    #[test]
+    fn rejects_interval_without_live_mode() {
+        assert_eq!(
+            validate_interval(false, Some(6)),
+            Err("--interval requires --live".to_string())
+        );
+    }
 }

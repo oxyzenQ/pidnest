@@ -1,4 +1,4 @@
-use std::fs;
+use std::{fs, path::Path};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Process {
@@ -8,10 +8,21 @@ pub struct Process {
     pub uid: u32,
 }
 
-pub fn scan_processes_for_uid(target_uid: u32) -> Result<Vec<Process>, String> {
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct ScanReport {
+    pub processes: Vec<Process>,
+    pub unreadable_statuses: usize,
+}
+
+pub fn scan_processes_for_uid(target_uid: u32) -> Result<ScanReport, String> {
+    scan_processes_for_uid_at(Path::new("/proc"), target_uid)
+}
+
+fn scan_processes_for_uid_at(proc_root: &Path, target_uid: u32) -> Result<ScanReport, String> {
     let mut processes = Vec::new();
-    let entries =
-        fs::read_dir("/proc").map_err(|error| format!("failed to read /proc: {error}"))?;
+    let mut unreadable_statuses = 0;
+    let entries = fs::read_dir(proc_root)
+        .map_err(|error| format!("failed to read {}: {error}", proc_root.display()))?;
 
     for entry in entries.flatten() {
         let Some(pid) = entry
@@ -23,8 +34,14 @@ pub fn scan_processes_for_uid(target_uid: u32) -> Result<Vec<Process>, String> {
         };
 
         let status_path = entry.path().join("status");
-        let Ok(contents) = fs::read_to_string(status_path) else {
-            continue;
+        let contents = match fs::read_to_string(status_path) {
+            Ok(contents) => contents,
+            Err(error) => {
+                if error.kind() != std::io::ErrorKind::NotFound {
+                    unreadable_statuses += 1;
+                }
+                continue;
+            }
         };
 
         let Ok(process) = parse_status(&contents) else {
@@ -37,7 +54,10 @@ pub fn scan_processes_for_uid(target_uid: u32) -> Result<Vec<Process>, String> {
     }
 
     processes.sort_by_key(|process| process.pid);
-    Ok(processes)
+    Ok(ScanReport {
+        processes,
+        unreadable_statuses,
+    })
 }
 
 pub fn parse_status(contents: &str) -> Result<Process, String> {
@@ -113,5 +133,26 @@ Uid:\t1000\t1000\t1000\t1000
         let error = parse_status("Name:\tbash\nPid:\t1234\n").expect_err("status should fail");
 
         assert_eq!(error, "missing PPid");
+    }
+
+    #[test]
+    fn tracks_unreadable_statuses_without_real_proc() {
+        let proc_root = std::env::temp_dir().join(format!("pidnest-test-{}", std::process::id()));
+        let readable_pid = proc_root.join("1234");
+        let unreadable_pid = proc_root.join("5678");
+        fs::create_dir_all(&readable_pid).expect("readable pid dir");
+        fs::create_dir_all(unreadable_pid.join("status")).expect("unreadable status path");
+        fs::write(
+            readable_pid.join("status"),
+            "Name:\tbash\nPid:\t1234\nPPid:\t1\nUid:\t1000\t1000\t1000\t1000\n",
+        )
+        .expect("status file");
+
+        let report = scan_processes_for_uid_at(&proc_root, 1000).expect("scan should succeed");
+
+        assert_eq!(report.processes.len(), 1);
+        assert_eq!(report.unreadable_statuses, 1);
+
+        fs::remove_dir_all(proc_root).expect("cleanup");
     }
 }

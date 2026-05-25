@@ -7,6 +7,10 @@ pidnest shows a clean process tree for a Linux user or UID.
 ```sh
 pidnest <USER_OR_UID>
 pidnest --me
+pidnest <USER_OR_UID> --live
+pidnest <USER_OR_UID> --live --interval <SECONDS>
+pidnest <USER_OR_UID> --no-pid
+pidnest <USER_OR_UID> --no-color
 pidnest -V
 pidnest --version
 ```
@@ -17,15 +21,54 @@ Examples:
 pidnest rezky
 pidnest 1000
 pidnest --me
+pidnest rezky --live
+pidnest rezky --live --interval 6
+pidnest rezky --no-pid
+pidnest rezky --no-color
 ```
 
-Output:
+Normal output:
 
 ```text
 rezky uid=1000
 └── bash pid=1234
     ├── python3 pid=1300
     └── cargo pid=1400
+
+3 roots · 18 processes
+```
+
+Without PID labels:
+
+```text
+rezky uid=1000
+└── bash
+    ├── python3
+    └── cargo
+
+3 roots · 18 processes
+```
+
+Live mode refreshes the tree in place. The default interval is 6 seconds. Custom
+intervals must be between 3 and 60 seconds:
+
+```sh
+pidnest rezky --live
+pidnest rezky --live --interval 3
+pidnest rezky --live --interval 60
+```
+
+Live mode footer:
+
+```text
+live mode · refresh 6s · press Ctrl+C to quit
+```
+
+Root examples:
+
+```sh
+pidnest root
+sudo pidnest root
 ```
 
 Version:
@@ -36,16 +79,19 @@ pidnest v1.0.0
 MIT · github.com/oxyzenQ/pidnest
 ```
 
-## Scope
+## Behavior
 
 `pidnest` scans `/proc`, reads `/proc/<pid>/status`, filters processes by UID,
 and prints a stable parent-child tree. Processes that disappear or cannot be
-read while scanning are skipped.
+read while scanning are skipped quietly.
 
-Live mode, colors, compact mode, and advanced TUI features are intentionally out
-of scope for the MVP.
+Color output is automatic: enabled only when stdout is a TTY, disabled when
+output is piped or redirected, and disabled when `NO_COLOR` is set. Use
+`--no-color` to force plain output.
 
 ## Development
+
+MSRV: Rust 1.85+
 
 ```sh
 cargo fmt

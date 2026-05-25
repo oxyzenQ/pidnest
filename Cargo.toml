@@ -10,4 +10,6 @@ repository = "https://github.com/oxyzenQ/pidnest"
 
 [dependencies]
 clap = { version = "4.5.38", features = ["derive"] }
+ctrlc = "3.4.7"
 nix = { version = "0.30.1", features = ["user"] }
+owo-colors = "4.2.0"
