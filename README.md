@@ -150,6 +150,18 @@ Required tools:
 - `clippy`
 - `codespell`
 
+## Version Updates
+
+Update release version references from one place:
+
+```sh
+./version-to.sh v1.2.0
+```
+
+The script accepts `vX.Y.Z` or `X.Y.Z`, updates Cargo metadata, README release
+examples, workflow docs, and the AUR package metadata, then regenerates
+`.SRCINFO` with `makepkg`.
+
 ## License
 
 MIT
