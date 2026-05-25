@@ -1,0 +1,6 @@
+[codespell]
+skip = .git,target,Cargo.lock
+quiet-level = 3
+check-filenames =
+builtin = clear,rare,code
+ignore-words-list = pid,ppid,uid,procfs,rezky,nightky,oxyzenq,alacritty,systemd,kthreadd,clippy,rustfmt,crate,mut
