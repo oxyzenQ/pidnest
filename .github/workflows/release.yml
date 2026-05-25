@@ -101,14 +101,15 @@ jobs:
         run: |
           set -Eeuo pipefail
           tag="${GITHUB_REF_NAME}"
-          previous_tag="$(git describe --tags --abbrev=0 "${tag}^" 2>/dev/null || true)"
+          current_commit="$(git rev-list -n 1 "$tag")"
+          previous_tag="$(git describe --tags --abbrev=0 "${current_commit}^" 2>/dev/null || true)"
 
           {
             printf '## Changes\n\n'
             if [[ -n "$previous_tag" ]]; then
-              git log --pretty=format:'- %s (%h)' "${previous_tag}..${tag}"
+              git log --pretty=format:'- %s (%h)' "${previous_tag}..${current_commit}"
             else
-              git log --pretty=format:'- %s (%h)' "$tag"
+              git log --pretty=format:'- %s (%h)' "$current_commit"
             fi
             printf '\n'
           } > release-notes.md
@@ -124,6 +125,11 @@ jobs:
           else
             echo "prerelease=false" >> "$GITHUB_OUTPUT"
           fi
+          if [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "aur_sync=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "aur_sync=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
@@ -137,6 +143,7 @@ jobs:
             dist/pidnest-bin-${{ github.ref_name }}-linux-aarch64.tar.gz.sha512
 
       - name: Trigger AUR sync
+        if: steps.release_type.outputs.aur_sync == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash

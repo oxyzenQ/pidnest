@@ -58,6 +58,9 @@ The sync accepts `v1.0.0` or `1.0.0`, normalizes to `v1.0.0`, updates `pkgver`,
 resets `pkgrel=1`, regenerates `.SRCINFO`, commits as `rezky_nightky`, and
 pushes to the AUR `master` branch.
 
+The release workflow dispatches AUR sync only for normal semver tags such as
+`v1.0.0`. Prerelease tags and `vX.Y.Z-stable.N` releases do not sync to AUR yet.
+
 ## Release Flow
 
 Run the local gate, commit, tag, and push the tag:
