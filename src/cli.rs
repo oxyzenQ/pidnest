@@ -42,9 +42,21 @@ pub struct Args {
     #[arg(long)]
     pub live: bool,
 
+    /// Alias for --live
+    #[arg(long)]
+    pub watch: bool,
+
     /// Live refresh interval in seconds
     #[arg(long)]
     pub interval: Option<u64>,
+
+    /// Limit rendered tree depth, where 0 shows only header and summary
+    #[arg(long)]
+    pub depth: Option<usize>,
+
+    /// Show process families matching a case-insensitive name substring
+    #[arg(long)]
+    pub find: Option<String>,
 
     /// Hide pid=<PID> labels
     #[arg(long)]
@@ -65,7 +77,9 @@ pub fn run(args: Args) -> Result<(), String> {
         return Ok(());
     }
 
-    let interval_seconds = validate_interval(args.live, args.interval)?;
+    let live = is_live_mode(args.live, args.watch);
+    let interval_seconds = validate_interval(live, args.interval)?;
+    let find = validate_find(args.find)?;
     let target = match (args.me, args.user_or_uid.as_deref()) {
         (true, None) => user::current_user()?,
         (false, Some(value)) => user::resolve_user_or_uid(value)?,
@@ -76,11 +90,15 @@ pub fn run(args: Args) -> Result<(), String> {
         show_pid: !args.no_pid,
         color: should_use_color(args.no_color),
     };
+    let view = ViewOptions {
+        max_depth: args.depth,
+        find,
+    };
 
-    if args.live {
-        run_live(target, interval_seconds, options)
+    if live {
+        run_live(target, interval_seconds, options, view)
     } else {
-        print!("{}", render_snapshot(&target, options, None)?);
+        print!("{}", render_snapshot(&target, options, &view, None)?);
         Ok(())
     }
 }
@@ -115,14 +133,35 @@ pub fn validate_interval(live: bool, interval: Option<u64>) -> Result<u64, Strin
     }
 }
 
+pub fn is_live_mode(live: bool, watch: bool) -> bool {
+    live || watch
+}
+
+fn validate_find(find: Option<String>) -> Result<Option<String>, String> {
+    match find {
+        Some(pattern) if pattern.trim().is_empty() => {
+            Err("--find requires a non-empty pattern".to_string())
+        }
+        Some(pattern) => Ok(Some(pattern)),
+        None => Ok(None),
+    }
+}
+
 fn should_use_color(no_color: bool) -> bool {
     !no_color && std::env::var_os("NO_COLOR").is_none() && io::stdout().is_terminal()
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+struct ViewOptions {
+    max_depth: Option<usize>,
+    find: Option<String>,
 }
 
 fn run_live(
     target: TargetUser,
     interval_seconds: u64,
     options: RenderOptions,
+    view: ViewOptions,
 ) -> Result<(), String> {
     let running = Arc::new(AtomicBool::new(true));
     let handler_running = Arc::clone(&running);
@@ -136,7 +175,7 @@ fn run_live(
         print!("\x1b[2J\x1b[H");
         print!(
             "{}",
-            render_snapshot(&target, options, Some(interval_seconds))?
+            render_snapshot(&target, options, &view, Some(interval_seconds))?
         );
         io::stdout()
             .flush()
@@ -155,6 +194,7 @@ fn run_live(
 fn render_snapshot(
     target: &TargetUser,
     options: RenderOptions,
+    view: &ViewOptions,
     live_interval_seconds: Option<u64>,
 ) -> Result<String, String> {
     let report = procfs::scan_processes_for_uid(target.uid)?;
@@ -162,6 +202,7 @@ fn render_snapshot(
         target,
         report,
         options,
+        view,
         live_interval_seconds,
     ))
 }
@@ -170,9 +211,10 @@ fn render_report(
     target: &TargetUser,
     report: ScanReport,
     options: RenderOptions,
+    view: &ViewOptions,
     live_interval_seconds: Option<u64>,
 ) -> String {
-    let forest = tree::build_forest(report.processes);
+    let mut forest = tree::build_forest(report.processes);
     if forest.processes.is_empty() {
         let mut output = if target.uid == 0 {
             "No readable processes found for uid=0. Try: sudo pidnest root\n".to_string()
@@ -186,6 +228,22 @@ fn render_report(
         }
         return output;
     }
+
+    if let Some(pattern) = &view.find {
+        let matches = tree::matching_process_ids(&forest, pattern);
+        if matches.is_empty() {
+            let mut output = format!("No processes matched '{pattern}'.\n");
+            if let Some(interval_seconds) = live_interval_seconds {
+                output.push('\n');
+                output.push_str(&render::render_live_footer(interval_seconds, options));
+                output.push('\n');
+            }
+            return output;
+        }
+        forest = tree::prune_for_matches(&forest, &matches);
+    }
+
+    forest = tree::limit_depth(&forest, view.max_depth);
 
     let mut output = render::render_forest(target, &forest, options);
     output.push('\n');
@@ -208,7 +266,51 @@ fn render_report(
 
 #[cfg(test)]
 mod tests {
+    use crate::procfs::Process;
+
     use super::*;
+
+    fn target() -> TargetUser {
+        TargetUser {
+            name: "rezky".to_string(),
+            uid: 1000,
+        }
+    }
+
+    fn process(name: &str, pid: u32, ppid: u32) -> Process {
+        Process {
+            name: name.to_string(),
+            pid,
+            ppid,
+            uid: 1000,
+        }
+    }
+
+    fn report() -> ScanReport {
+        ScanReport {
+            processes: vec![
+                process("bash", 20, 1),
+                process("python3", 30, 20),
+                process("codex", 40, 30),
+                process("worker", 50, 40),
+            ],
+            unreadable_statuses: 0,
+        }
+    }
+
+    fn options(show_pid: bool) -> RenderOptions {
+        RenderOptions {
+            show_pid,
+            color: false,
+        }
+    }
+
+    fn view(max_depth: Option<usize>, find: Option<&str>) -> ViewOptions {
+        ViewOptions {
+            max_depth,
+            find: find.map(str::to_string),
+        }
+    }
 
     #[test]
     fn accepts_default_interval_for_live_mode() {
@@ -239,6 +341,56 @@ mod tests {
             validate_interval(false, Some(6)),
             Err("--interval requires --live".to_string())
         );
+    }
+
+    #[test]
+    fn watch_behaves_like_live_for_interval_validation() {
+        assert!(is_live_mode(false, true));
+        assert_eq!(validate_interval(is_live_mode(false, true), Some(3)), Ok(3));
+    }
+
+    #[test]
+    fn depth_zero_renders_header_and_summary_only() {
+        let output = render_report(
+            &target(),
+            report(),
+            options(true),
+            &view(Some(0), None),
+            None,
+        );
+
+        assert_eq!(output, "rezky uid=1000\n\n0 roots · 0 processes\n");
+    }
+
+    #[test]
+    fn depth_combines_with_no_pid() {
+        let output = render_report(
+            &target(),
+            report(),
+            options(false),
+            &view(Some(2), None),
+            None,
+        );
+
+        assert_eq!(
+            output,
+            "rezky uid=1000\n└── bash\n    └── python3\n\n1 roots · 2 processes\n"
+        );
+        assert!(!output.contains(" pid="));
+        assert!(!output.contains("\u{1b}["));
+    }
+
+    #[test]
+    fn find_no_match_returns_clean_message() {
+        let output = render_report(
+            &target(),
+            report(),
+            options(true),
+            &view(None, Some("missing")),
+            None,
+        );
+
+        assert_eq!(output, "No processes matched 'missing'.\n");
     }
 
     #[test]

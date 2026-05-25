@@ -10,7 +10,10 @@ pidnest shows a clean process tree for a Linux user or UID.
 pidnest <USER_OR_UID>
 pidnest --me
 pidnest <USER_OR_UID> --live
+pidnest <USER_OR_UID> --watch
 pidnest <USER_OR_UID> --live --interval <SECONDS>
+pidnest <USER_OR_UID> --depth <N>
+pidnest <USER_OR_UID> --find <PATTERN>
 pidnest <USER_OR_UID> --no-pid
 pidnest <USER_OR_UID> --no-color
 pidnest -V
@@ -24,7 +27,11 @@ pidnest rezky
 pidnest 1000
 pidnest --me
 pidnest rezky --live
+pidnest --me --watch
 pidnest rezky --live --interval 6
+pidnest --me --depth 2
+pidnest --me --find codex
+pidnest root --depth 1
 pidnest rezky --no-pid
 pidnest rezky --no-color
 ```
@@ -56,6 +63,7 @@ intervals must be between 3 and 60 seconds:
 
 ```sh
 pidnest rezky --live
+pidnest rezky --watch
 pidnest rezky --live --interval 3
 pidnest rezky --live --interval 60
 ```
@@ -64,6 +72,14 @@ Live mode footer:
 
 ```text
 live mode · refresh 6s · press Ctrl+C to quit
+```
+
+Limit tree depth or find a process family:
+
+```sh
+pidnest --me --depth 2
+pidnest --me --find codex
+pidnest root --depth 1
 ```
 
 Root examples:
@@ -81,7 +97,7 @@ pidnest --version
 ```
 
 ```text
-pidnest v1.0.0 (<commit>)
+pidnest v1.1.0 (<commit>)
 © 2026 rezky_nightky
 MIT · github.com/oxyzenQ/pidnest
 ```
@@ -101,16 +117,16 @@ output is piped or redirected, and disabled when `NO_COLOR` is set. Use
 Install from a GitHub release archive:
 
 ```sh
-curl -fLO https://github.com/oxyzenQ/pidnest/releases/download/v1.0.0/pidnest-bin-v1.0.0-linux-x86_64.tar.gz
-tar -xzf pidnest-bin-v1.0.0-linux-x86_64.tar.gz
+curl -fLO https://github.com/oxyzenQ/pidnest/releases/download/v1.1.0/pidnest-bin-v1.1.0-linux-x86_64.tar.gz
+tar -xzf pidnest-bin-v1.1.0-linux-x86_64.tar.gz
 sudo install -Dm755 pidnest /usr/local/bin/pidnest
 ```
 
 For Linux aarch64:
 
 ```sh
-curl -fLO https://github.com/oxyzenQ/pidnest/releases/download/v1.0.0/pidnest-bin-v1.0.0-linux-aarch64.tar.gz
-tar -xzf pidnest-bin-v1.0.0-linux-aarch64.tar.gz
+curl -fLO https://github.com/oxyzenQ/pidnest/releases/download/v1.1.0/pidnest-bin-v1.1.0-linux-aarch64.tar.gz
+tar -xzf pidnest-bin-v1.1.0-linux-aarch64.tar.gz
 sudo install -Dm755 pidnest /usr/local/bin/pidnest
 ```
 

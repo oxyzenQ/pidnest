@@ -54,7 +54,7 @@ when triggered manually with a tag. The required repository secret is:
 AUR_SSH_PRIVATE_KEY
 ```
 
-The sync accepts `v1.0.0` or `1.0.0`, normalizes to `v1.0.0`, updates `pkgver`,
+The sync accepts `v1.1.0` or `1.1.0`, normalizes to `v1.1.0`, updates `pkgver`,
 resets `pkgrel=1`, regenerates `.SRCINFO`, commits as `rezky_nightky`, and
 pushes to the AUR `master` branch.
 
@@ -63,17 +63,19 @@ the official fingerprint before writing `known_hosts`. First publish may
 bootstrap the AUR git repository if it is empty or has no `master` branch yet.
 
 The release workflow dispatches AUR sync only for normal semver tags such as
-`v1.0.0`. Prerelease tags and `vX.Y.Z-stable.N` releases do not sync to AUR yet.
+`v1.1.0`. Prerelease tags and `vX.Y.Z-stable.N` releases do not sync to AUR yet.
 
 ## Release Flow
 
-Run the local gate, commit, tag, and push the tag:
+For a v1.1.0 release, update versions, run the local gate, commit, tag, and
+push the tag:
 
 ```sh
+./version-to.sh v1.1.0
 ./check.sh
 git add .
-git commit -m "release: v1.0.0"
-git tag -a v1.0.0 -m v1.0.0
+git commit -m "release: v1.1.0"
+git tag -a v1.1.0 -m v1.1.0
 git push origin main
-git push origin v1.0.0
+git push origin v1.1.0
 ```
