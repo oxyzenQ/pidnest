@@ -51,7 +51,7 @@ pub struct Args {
     pub interval: Option<u64>,
 
     /// Limit rendered tree depth, where 0 shows only header and summary
-    #[arg(long)]
+    #[arg(long, allow_hyphen_values = true)]
     pub depth: Option<usize>,
 
     /// Show process families matching a case-insensitive name substring
