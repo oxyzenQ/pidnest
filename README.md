@@ -162,6 +162,13 @@ The script accepts `vX.Y.Z` or `X.Y.Z`, updates Cargo metadata, README release
 examples, workflow docs, and the AUR package metadata, then regenerates
 `.SRCINFO` with `makepkg`.
 
+Validate a version update by running:
+
+```sh
+./version-to.sh vX.Y.Z
+./check.sh
+```
+
 ## License
 
 MIT

@@ -244,9 +244,10 @@ mod tests {
     #[test]
     fn formats_version_metadata_with_hash() {
         let output = version_text_with_hash("abc1234");
+        let expected_version = format!("v{}", env!("CARGO_PKG_VERSION"));
 
         assert!(output.contains("pidnest"));
-        assert!(output.contains("v1.0.0"));
+        assert!(output.contains(&expected_version));
         assert!(output.contains("(abc1234)"));
         assert!(output.contains("rezky_nightky"));
         assert!(output.contains("MIT"));
@@ -256,9 +257,10 @@ mod tests {
     #[test]
     fn formats_version_metadata_with_unknown_fallback() {
         let output = version_text_with_hash("");
+        let expected_version = format!("v{}", env!("CARGO_PKG_VERSION"));
 
         assert!(output.contains("pidnest"));
-        assert!(output.contains("v1.0.0"));
+        assert!(output.contains(&expected_version));
         assert!(output.contains("(unknown)"));
         assert!(output.contains("rezky_nightky"));
         assert!(output.contains("MIT"));
