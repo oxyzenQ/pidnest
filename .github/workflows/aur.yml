@@ -1,0 +1,139 @@
+name: pidnest - AUR Sync
+
+on:
+  repository_dispatch:
+    types:
+      - aur-sync
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag, such as v1.0.0 or 1.0.0
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  AUR_REPO: ssh://aur@aur.archlinux.org/pidnest-bin.git
+  AUR_BRANCH: master
+  PKGBUILD_DIR: aur/pidnest-bin
+
+jobs:
+  sync:
+    name: Sync pidnest-bin
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve release tag
+        id: version
+        shell: bash
+        env:
+          RAW_TAG: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.tag || inputs.tag }}
+        run: |
+          set -Eeuo pipefail
+          tag="$RAW_TAG"
+          if [[ "$tag" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            tag="v${tag}"
+          fi
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "invalid tag: $RAW_TAG" >&2
+            exit 1
+          fi
+          pkgver="${tag#v}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "pkgver=$pkgver" >> "$GITHUB_OUTPUT"
+
+      - name: Update package metadata
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          pkgver="${{ steps.version.outputs.pkgver }}"
+          sed -i -E "s/^pkgver=.*/pkgver=${pkgver}/" "${PKGBUILD_DIR}/PKGBUILD"
+          sed -i -E "s/^pkgrel=.*/pkgrel=1/" "${PKGBUILD_DIR}/PKGBUILD"
+          cat > "${PKGBUILD_DIR}/.SRCINFO" <<EOF
+          pkgbase = pidnest-bin
+          	pkgdesc = Clean Linux process tree viewer by user or UID
+          	pkgver = ${pkgver}
+          	pkgrel = 1
+          	url = https://github.com/oxyzenQ/pidnest
+          	arch = x86_64
+          	arch = aarch64
+          	license = MIT
+          	depends = glibc
+          	depends = gcc-libs
+          	provides = pidnest
+          	conflicts = pidnest
+          	options = !strip
+          
+          pkgname = pidnest-bin
+          EOF
+
+      - name: Setup SSH
+        shell: bash
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          set -Eeuo pipefail
+          if [[ -z "${AUR_SSH_PRIVATE_KEY}" ]]; then
+            echo "AUR_SSH_PRIVATE_KEY secret is required" >&2
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur
+          chmod 600 ~/.ssh/aur
+          cat > ~/.ssh/known_hosts <<'EOF'
+          aur.archlinux.org ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBOZAVWmj2k+dHTfyum7FyIivGcVUkDFHaXmPNxDwF7l8TvkAN8VDQJHEEGJhALMYtNsQ+kt0gksSh4HZqj9n5hI=
+          EOF
+          cat > ~/.ssh/config <<'EOF'
+          Host aur.archlinux.org
+            User aur
+            IdentityFile ~/.ssh/aur
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+          EOF
+          chmod 600 ~/.ssh/config ~/.ssh/known_hosts
+
+      - name: Clone AUR repository
+        run: git clone --branch "${AUR_BRANCH}" "${AUR_REPO}" aur-repo
+
+      - name: Copy package files
+        run: |
+          cp "${PKGBUILD_DIR}/PKGBUILD" aur-repo/PKGBUILD
+          cp "${PKGBUILD_DIR}/.SRCINFO" aur-repo/.SRCINFO
+
+      - name: Commit AUR update
+        working-directory: aur-repo
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name "rezky_nightky"
+          git config user.email "rezky2399@proton.me"
+          git add PKGBUILD .SRCINFO
+          if git diff --cached --quiet; then
+            echo "AUR package is already up to date"
+            exit 0
+          fi
+          git commit -m "Update pidnest-bin to ${{ steps.version.outputs.tag }}"
+
+      - name: Push AUR update
+        working-directory: aur-repo
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          for attempt in 1 2 3; do
+            if git push origin "${AUR_BRANCH}"; then
+              exit 0
+            fi
+            sleep $((attempt * 5))
+            git pull --rebase origin "${AUR_BRANCH}"
+          done
+          git push origin "${AUR_BRANCH}"
+
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/aur

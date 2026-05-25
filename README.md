@@ -1,5 +1,7 @@
 # pidnest
 
+![CI](https://github.com/oxyzenQ/pidnest/actions/workflows/ci.yml/badge.svg)
+
 pidnest shows a clean process tree for a Linux user or UID.
 
 ## Usage
@@ -93,6 +95,30 @@ read while scanning are skipped quietly.
 Color output is automatic: enabled only when stdout is a TTY, disabled when
 output is piped or redirected, and disabled when `NO_COLOR` is set. Use
 `--no-color` to force plain output.
+
+## Installation
+
+Install from a GitHub release archive:
+
+```sh
+curl -fLO https://github.com/oxyzenQ/pidnest/releases/download/v1.0.0/pidnest-bin-v1.0.0-linux-x86_64.tar.gz
+tar -xzf pidnest-bin-v1.0.0-linux-x86_64.tar.gz
+sudo install -Dm755 pidnest /usr/local/bin/pidnest
+```
+
+For Linux aarch64:
+
+```sh
+curl -fLO https://github.com/oxyzenQ/pidnest/releases/download/v1.0.0/pidnest-bin-v1.0.0-linux-aarch64.tar.gz
+tar -xzf pidnest-bin-v1.0.0-linux-aarch64.tar.gz
+sudo install -Dm755 pidnest /usr/local/bin/pidnest
+```
+
+Install from the AUR:
+
+```sh
+yay -S pidnest-bin
+```
 
 ## Development
 
