@@ -86,7 +86,17 @@ pub fn run(args: Args) -> Result<(), String> {
 }
 
 pub fn version_text() -> String {
-    format!("pidnest v{VERSION}\n© 2026 {AUTHOR}\nMIT · {REPOSITORY}")
+    version_text_with_hash(option_env!("PIDNEST_GIT_HASH").unwrap_or("unknown"))
+}
+
+pub fn version_text_with_hash(git_hash: &str) -> String {
+    let git_hash = if git_hash.trim().is_empty() {
+        "unknown"
+    } else {
+        git_hash.trim()
+    };
+
+    format!("pidnest v{VERSION} ({git_hash})\n© 2026 {AUTHOR}\nMIT · {REPOSITORY}")
 }
 
 pub fn validate_interval(live: bool, interval: Option<u64>) -> Result<u64, String> {
@@ -229,5 +239,29 @@ mod tests {
             validate_interval(false, Some(6)),
             Err("--interval requires --live".to_string())
         );
+    }
+
+    #[test]
+    fn formats_version_metadata_with_hash() {
+        let output = version_text_with_hash("abc1234");
+
+        assert!(output.contains("pidnest"));
+        assert!(output.contains("v1.0.0"));
+        assert!(output.contains("(abc1234)"));
+        assert!(output.contains("rezky_nightky"));
+        assert!(output.contains("MIT"));
+        assert!(output.contains("github.com/oxyzenQ/pidnest"));
+    }
+
+    #[test]
+    fn formats_version_metadata_with_unknown_fallback() {
+        let output = version_text_with_hash("");
+
+        assert!(output.contains("pidnest"));
+        assert!(output.contains("v1.0.0"));
+        assert!(output.contains("(unknown)"));
+        assert!(output.contains("rezky_nightky"));
+        assert!(output.contains("MIT"));
+        assert!(output.contains("github.com/oxyzenQ/pidnest"));
     }
 }

@@ -73,8 +73,13 @@ sudo pidnest root
 
 Version:
 
+```sh
+pidnest -V
+pidnest --version
+```
+
 ```text
-pidnest v1.0.0
+pidnest v1.0.0 (<commit>)
 © 2026 rezky_nightky
 MIT · github.com/oxyzenQ/pidnest
 ```
