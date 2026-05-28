@@ -1,9 +1,15 @@
-# pidnest
+<p align="center">
+  <img src="assets/pidnest-logo.png" alt="pidnest logo" width="160">
+</p>
 
-![CI](https://github.com/oxyzenQ/pidnest/actions/workflows/ci.yml/badge.svg)
-[![Ko-fi](https://img.shields.io/badge/Ko--fi-rezky-ff5f5f?logo=kofi&logoColor=white)](https://ko-fi.com/rezky)
+<h1 align="center">pidnest</h1>
 
-pidnest shows a clean process tree for a Linux user or UID.
+<p align="center">
+  <a href="https://github.com/oxyzenQ/pidnest/actions/workflows/ci.yml"><img src="https://github.com/oxyzenQ/pidnest/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://ko-fi.com/rezky"><img src="https://img.shields.io/badge/Ko--fi-rezky-ff5f5f?logo=kofi&logoColor=white" alt="Ko-fi"></a>
+</p>
+
+<p align="center">pidnest shows a clean process tree for a Linux user or UID.</p>
 
 ## Usage
 
