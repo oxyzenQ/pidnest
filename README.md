@@ -1,6 +1,7 @@
 # pidnest
 
 ![CI](https://github.com/oxyzenQ/pidnest/actions/workflows/ci.yml/badge.svg)
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-rezky-ff5f5f?logo=kofi&logoColor=white)](https://ko-fi.com/rezky)
 
 pidnest shows a clean process tree for a Linux user or UID.
 
